@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>audio demo</title>
+    <style type="text/css">
+      button {
+        background-color: green;
+        width:50%;
+        height:50px;
+      }
+
+      button.selected {
+        background-color: red;
+      }
+
+    </style>
+  </head>
+  <body>
+    <script>
+        class wokletNode extends AudioWorkletNode {
+            constructor(context) {
+                super(context, 'myworklet');
+                this.port.onmessage = this.handleMessage.bind(this);
+            }
+
+            handleMessage(event) {
+            }
+        }
+
+        let audioContext            = null;
+        let sampleRate              = 16000;
+        let audioStreamNode         = null;
+        let audioWorkletNode        = null;
+        let audioDomNode            = null;
+        let worker                  = null;
+        
+        worker = new Worker('worker2.js');
+
+        // worker.onmessage = function(event) {
+        //     console.log(event);
+        //     sharedBuffer = event.data.data;
+        // }
+        let sharedBuffer = {
+            outputSig    : new SharedArrayBuffer(4),
+        };
+
+        worker.postMessage({
+            command : "init",
+            data    : sharedBuffer
+        });
+
+        navigator.mediaDevices.getUserMedia( {audio : {noiseSuppression : true, echoCancellation:false, autoGainControl:false} } )
+            .then(createAudioContext)
+            .then(createWorkletNode)
+            .then(connectWorkletNode)
+            .catch(console.log);
+
+
+        function createAudioContext(stream) {
+            audioContext = new AudioContext({
+                sampleRate : sampleRate,
+            });
+            audioStreamNode = audioContext.createMediaStreamSource(stream);
+            return new Promise((resolve) =>{resolve();});
+        }
+
+        function createWorkletNode () {
+            return audioContext.audioWorklet.addModule("worklet_test3.js")
+                .then(()=>{
+                    audioWorkletNode = new wokletNode(audioContext);
+                    audioWorkletNode.port.postMessage({
+                        status : "sharedBuffer",
+                        data    : sharedBuffer                        
+                    });
+                    return new Promise((resolve) =>{resolve();});
+                });
+        }
+
+        function connectWorkletNode() {
+            audioStreamNode.connect(audioWorkletNode);
+            
+            let dest = audioContext.createMediaStreamDestination();
+            audioWorkletNode.connect(dest);
+
+
+            if (!audioDomNode) {
+                audioDomNode = new Audio();
+            }
+            audioDomNode.srcObject = dest.stream;
+            audioDomNode.play();
+        }
+    </script>
+  </body>
+</html>
+
+
