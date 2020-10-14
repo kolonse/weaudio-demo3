@@ -27,7 +27,7 @@ self.addEventListener('message', function (e) {
             g_sharbuffer = message.data;
             g_decodeSharedBufferSig = new Int32Array(g_sharbuffer.outputSig);
             g_decodeSharedBufferSig[0] = 0;
-            setInterval(Read_Data, 5);
+            setTimeout(Read_Data, 5);
             break;
         }
     }
