@@ -6,6 +6,7 @@ var g_decodeSharedBufferState = null;
 var g_decodeSharedBufferData = null;
 var g_decodeSharedBufferSig = null;
 
+let now = 0, last = 0;
 class myworklet extends AudioWorkletProcessor {
     constructor() {
         // The super constructor call is required.
@@ -29,6 +30,12 @@ class myworklet extends AudioWorkletProcessor {
 
 
     process(inputs, outputs, parameters) {
+        now = new Date().getTime();
+        if (last != 0) {
+            console.log( now - last) ;
+        }
+        last = now;
+        
         if (inputs.length === 0 || inputs[0].length === 0) return true;
         if (!g_sharbuffer) return true;
 
