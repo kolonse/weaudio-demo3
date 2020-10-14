@@ -13,7 +13,7 @@ function Read_Data() {
         now = new Date().getTime();
         Atomics.wait(g_decodeSharedBufferSig, 0, 0) ;
         let sig = Atomics.load(g_decodeSharedBufferSig, 0);
-        // console.log(new Date().getTime() - now);
+        console.log("worker: ", new Date().getTime() - now);
 
         Atomics.store(g_decodeSharedBufferSig, 0, 0);
     }

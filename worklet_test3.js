@@ -32,10 +32,10 @@ class myworklet extends AudioWorkletProcessor {
     process(inputs, outputs, parameters) {
         now = new Date().getTime();
         if (last != 0) {
-            console.log( now - last) ;
+            console.log( "worklet: ", now - last) ;
         }
         last = now;
-        
+
         if (inputs.length === 0 || inputs[0].length === 0) return true;
         if (!g_sharbuffer) return true;
 
