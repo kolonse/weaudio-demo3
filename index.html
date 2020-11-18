@@ -26,7 +26,13 @@
     <script>
         let inputsDom = document.getElementById("inputs");
         let outputsDom = document.getElementById("outputs");
-		navigator.mediaDevices.enumerateDevices()
+
+        navigator.mediaDevices.getUserMedia({audio:true}).then(stream =>{
+            stream.getAudioTracks().forEach(track =>{
+                track.stop();
+            });
+            
+            navigator.mediaDevices.enumerateDevices()
 			.then(function(devices) {
                 devices.forEach(function(device) {
                     console.log(device.kind + ": " + device.label +
@@ -79,6 +85,9 @@
 			.catch(function(err) {
 			  console.log(err.name + ": " + err.message);
             });
+        }).catch(console.error);
+
+
             
 
             class wokletNode extends AudioWorkletNode {
