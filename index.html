@@ -13,11 +13,11 @@
     </style>
   </head>
   <body>
-    <p><strong>select input devices list:</strong> </p>
+    <p><strong>select mic devices list:</strong> </p>
     <div class="inputs" id="inputs">
     </div>
     <br>
-    <p><strong>select output devices list:</strong></p>
+    <p><strong>select speaker devices list:</strong></p>
     <div class="outputs" id="outputs">
     </div>
 
@@ -31,7 +31,7 @@
             stream.getAudioTracks().forEach(track =>{
                 track.stop();
             });
-            
+
             navigator.mediaDevices.enumerateDevices()
 			.then(function(devices) {
                 devices.forEach(function(device) {
