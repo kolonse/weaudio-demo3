@@ -1,4 +1,3 @@
-<!doctype html>
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
@@ -9,88 +8,201 @@
         background-color: green;
         width:50%;
         height:50px;
+        font-size:30px;
       }
-
-      button.selected {
-        background-color: red;
-      }
-
     </style>
   </head>
   <body>
+    <p><strong>select input devices list:</strong> </p>
+    <div class="inputs" id="inputs">
+    </div>
+    <br>
+    <p><strong>select output devices list:</strong></p>
+    <div class="outputs" id="outputs">
+    </div>
+
+    <br>
+    <button onclick="StartText(this)"><strong>Start Test</strong></button>
     <script>
-        class wokletNode extends AudioWorkletNode {
-            constructor(context) {
-                super(context, 'myworklet');
-                this.port.onmessage = this.handleMessage.bind(this);
-            }
+        let inputsDom = document.getElementById("inputs");
+        let outputsDom = document.getElementById("outputs");
+		navigator.mediaDevices.enumerateDevices()
+			.then(function(devices) {
+                devices.forEach(function(device) {
+                    console.log(device.kind + ": " + device.label +
+                    " id = " + device.deviceId);
+                    if (device.kind === "audioinput") {
+                        var input = document.createElement("input");
+                        var label = document.createElement("label");
 
-            handleMessage(event) {
-            }
-        }
+                        input.type="radio";
+                        input.id=device.deviceId;
+                        input.name="inputs";
+                        input.value=device.label;
 
-        let audioContext            = null;
-        let sampleRate              = 16000;
-        let audioStreamNode         = null;
-        let audioWorkletNode        = null;
-        let audioDomNode            = null;
-        let worker                  = null;
-        
-        worker = new Worker('worker2.js');
+                        label.for=device.label;
+                        label.textContent=device.label;
 
-        // worker.onmessage = function(event) {
-        //     console.log(event);
-        //     sharedBuffer = event.data.data;
-        // }
-        let sharedBuffer = {
-            outputSig    : new SharedArrayBuffer(4),
-        };
+                        inputsDom.appendChild(input);
+                        inputsDom.appendChild(label);
 
-        worker.postMessage({
-            command : "init",
-            data    : sharedBuffer
-        });
+                        var br = document.createElement("br");
+                        inputsDom.appendChild(br);
 
-        navigator.mediaDevices.getUserMedia( {audio : {noiseSuppression : true, echoCancellation:false, autoGainControl:false} } )
-            .then(createAudioContext)
-            .then(createWorkletNode)
-            .then(connectWorkletNode)
-            .catch(console.log);
+                        if (device.deviceId === "default") {
+                            input.checked = true;
+                        }
+                    } else if (device.kind === "audiooutput") {
+                        var input = document.createElement("input");
+                        var label = document.createElement("label");
 
+                        input.type="radio";
+                        input.id=device.deviceId;
+                        input.name="outputs";
+                        input.value=device.label;
 
-        function createAudioContext(stream) {
-            audioContext = new AudioContext({
-                sampleRate : sampleRate,
-            });
-            audioStreamNode = audioContext.createMediaStreamSource(stream);
-            return new Promise((resolve) =>{resolve();});
-        }
+                        label.for=device.label;
+                        label.textContent=device.label;
 
-        function createWorkletNode () {
-            return audioContext.audioWorklet.addModule("worklet_test3.js")
-                .then(()=>{
-                    audioWorkletNode = new wokletNode(audioContext);
-                    audioWorkletNode.port.postMessage({
-                        status : "sharedBuffer",
-                        data    : sharedBuffer                        
-                    });
-                    return new Promise((resolve) =>{resolve();});
+                        outputsDom.appendChild(input);
+                        outputsDom.appendChild(label);
+
+                        var br = document.createElement("br");
+                        outputsDom.appendChild(br);
+
+                        if (device.deviceId === "default") {
+                            input.checked = true;
+                        }
+                    }
                 });
-        }
-
-        function connectWorkletNode() {
-            audioStreamNode.connect(audioWorkletNode);
+			})
+			.catch(function(err) {
+			  console.log(err.name + ": " + err.message);
+            });
             
-            let dest = audioContext.createMediaStreamDestination();
-            audioWorkletNode.connect(dest);
 
+            class wokletNode extends AudioWorkletNode {
+                constructor(context) {
+                    super(context, 'myworklet');
+                    this.port.onmessage = this.handleMessage.bind(this);
+                }
 
-            if (!audioDomNode) {
-                audioDomNode = new Audio();
+                handleMessage(event) {
+                }
             }
-            audioDomNode.srcObject = dest.stream;
-            audioDomNode.play();
-        }
+
+
+            class AudioTest {
+                constructor(inputDeviceId, outputDeviceId) {
+                    this.audioContext       = null;//new AudioContext();
+                    this.audioStreamNode    = null;
+                    this.audioStream        = null;
+                    this.inputDeviceId      = inputDeviceId;
+                    this.outputDeviceId     = outputDeviceId;
+                    this.sampleRate         = 16000;
+                    this.audioWorkletNode   = null;
+                }
+
+                start() {
+                    navigator.mediaDevices.getUserMedia( {audio : {deviceId: this.inputDeviceId, autoGainControl: true,noiseSuppression:true,echoCancellation:true }} )
+                        .then(this.createAudioContext.bind(this))
+                        .then(this.createWorkletNode.bind(this))
+                        .then(this.connectWorkletNode.bind(this))
+                        .catch(console.error);
+                }
+
+                stop() {
+                    if (this.audioContext) this.audioContext.close();
+
+                    if (this.audioStreamNode) {
+                        this.audioStreamNode.disconnect();
+                        this.audioStreamNode = null;
+                    }
+
+                    if (this.audioWorkletNode) {
+                        this.audioWorkletNode.disconnect();
+                        this.audioWorkletNode = null;
+                    }
+
+                    if (this.audioDomNode){
+                        this.audioDomNode.srcObject = null;
+                        // this.audioDomNode.stop();
+                        this.audioDomNode = null;
+                    }
+
+                    if (this.audioStream) {
+                        const tracks = this.audioStream.getAudioTracks();
+                        tracks.forEach((track) => {
+                            track.stop()
+                        });
+
+                        this.audioStream = null;
+                    }
+                }
+
+                createAudioContext(stream) {
+                    this.audioContext = new AudioContext({
+                        sampleRate : this.sampleRate,
+                    });
+                    this.audioStream = stream;
+                    this.audioStreamNode = this.audioContext.createMediaStreamSource(stream);
+                    return new Promise((resolve) =>{resolve();});
+                }
+
+                createWorkletNode () {
+                    let that = this;
+                    return this.audioContext.audioWorklet.addModule("worklet_test4.js")
+                        .then(()=>{
+                            that.audioWorkletNode = new wokletNode(that.audioContext);
+                            return new Promise((resolve) =>{resolve();});
+                        });
+                }
+
+                connectWorkletNode() {
+                    this.audioStreamNode.connect(this.audioWorkletNode);
+                    
+                    let dest = this.audioContext.createMediaStreamDestination();
+                    this.audioWorkletNode.connect(dest);
+
+                    if (!this.audioDomNode) {
+                        this.audioDomNode = new Audio();
+                        
+                    }
+                    this.audioDomNode.srcObject = dest.stream;
+                    this.audioDomNode.play();
+
+                    this.audioDomNode.setSinkId(this.outputDeviceId).catch(err =>{
+                        console.error(err);
+                    });
+                }
+            }
+
+
+            let audioText = null;
+            function StartText() {
+                if (audioText) audioText.stop();
+
+                let inputs = inputsDom.querySelectorAll("input");
+                let outputs = outputsDom.querySelectorAll("input");
+
+                let inputDeviceId, outputDeviceId ;
+                console.log(inputs,outputs);
+                inputs.forEach(input => {
+                    if (input.checked) {
+                        inputDeviceId = input.id;
+                    }
+                });
+
+                outputs.forEach(input => {
+                    if (input.checked) {
+                        outputDeviceId = input.id;
+                    }
+                })
+
+                console.log(inputDeviceId, outputDeviceId);
+                audioText = new AudioTest(inputDeviceId, outputDeviceId);
+                audioText.start();
+            }
     </script>
   </body>
 </html>
