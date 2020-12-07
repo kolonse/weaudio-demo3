@@ -4,6 +4,7 @@ function log(str) {
     logDom.textContent = str;
 }
 
+let RTC_PACKET_MAX_SIZE = 200;
 class AudioTest {
     constructor(inputDeviceId, outputDeviceId, opt) {
         this.audioContext       = null;//new AudioContext();
@@ -18,10 +19,15 @@ class AudioTest {
             url : opt.url || "https://10.100.50.80:9000/udp"
         } ;
 
-        this.sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, 160);
-        this.receSAB = new SABRingBuffer(receiveSharedBuffer.state, receiveSharedBuffer.buffer, 160);
+        this.sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
+        this.receSAB = new SABRingBuffer(receiveSharedBuffer.state, receiveSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
         this.network = null;
-        this.Encode_data = new Float32Array(160);
+
+        this.Encode_data = new Float32Array(RTC_PACKET_MAX_SIZE / 4);
+        this.Encode_data_8 = new Uint8Array(this.Encode_data.buffer);
+
+        this.Decode_data = new Float32Array(RTC_PACKET_MAX_SIZE / 4);
+        this.Decode_data_8 = new Uint8Array(this.Decode_data.buffer);
 
         this.sendSeq = 0;
         this.recvSeq = 0;
@@ -90,7 +96,12 @@ class AudioTest {
         let data = null;
         while( (data = this.sendSAB.read() ) !== null) {
             this.Encode_data.set(data);
-            this.Send_Pck(this.Encode_data);
+            let len = this.Encode_data_8[0];
+            let buff = this.Encode_data_8.subarray(1, 1 + len);
+            let sendData = new Uint8Array(len);
+            sendData.set(buff);
+
+            this.Send_Pck(sendData);
             break;
         }
 
@@ -121,8 +132,13 @@ class AudioTest {
         if (typeof(data) === "string") {
             console.log(data, typeof(data));
         } else {
-            let buff = new Float32Array(data);
-            this.receSAB.write(buff);
+            // let buff = new Float32Array(data);
+            // this.receSAB.write(buff);
+            let buff = new Uint8Array(data);
+            this.Decode_data_8[0] = buff.length;
+            this.Decode_data_8.set(buff, 1);
+
+            this.receSAB.write(this.Decode_data);
         }
     }
 

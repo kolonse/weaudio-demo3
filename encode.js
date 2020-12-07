@@ -1,7 +1,43 @@
+importScripts("audiolib.js")
+
+var audio_init;
+var audio_encode;
+var audio_decode;
+var get_mixed_data;
+var audio_uninit;
+
+var audio_context;
+
+var local_data_ ;
+var local_data_ptr_ ;
+
+let audio_sample_rate = 16000 ;
+let frame_size_10ms = audio_sample_rate / 100;
+let RTC_PACKET_MAX_SIZE = 200;
+
+Module["onRuntimeInitialized"] = () => {
+	audio_init = Module.cwrap('Audio_Init', 'number');
+    audio_uninit = Module.cwrap('Audio_UnInit', 'number', ['number']);
+    audio_encode = Module.cwrap('Audio_Encode', 'number', ['number', 'number', 'number', 'number']);
+    audio_decode = Module.cwrap('Audio_Decode', 'number', ['number', 'number', 'number']);
+    get_mixed_data = Module.cwrap('Get_Mixed_Audio', 'number', ['number', 'number', 'number']);
+
+    audio_context = audio_init();
+    if (!audio_context) {
+        console.error("encoder init fail");
+    } else {
+        console.log("encoder init success");
+    }
+
+    local_data_ptr_ = Module._malloc(frame_size_10ms * 4);
+    local_data_ = Module.HEAPF32.subarray(local_data_ptr_/4, local_data_ptr_/4 + frame_size_10ms);   
+}
+
 let encodeSAB = null;
 let sendSAB = null;
 let sendSharedBuffer = null;
 let g_sharbuffer = null;
+
 
 function OnMessage(e) {
     switch( e.data.event ) {
@@ -9,20 +45,36 @@ function OnMessage(e) {
             {
                 g_sharbuffer = e.data.sharedBuffer;
                 sendSharedBuffer = e.data.sendSharedBuffer;
-                sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, 160);
-                encodeSAB = new SABRingBuffer(g_sharbuffer.inputState, g_sharbuffer.inputBuffer, 160);
+                sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
+                sendSAB.clear();
+                encodeSAB = new SABRingBuffer(g_sharbuffer.inputState, g_sharbuffer.inputBuffer, frame_size_10ms);
+                encodeSAB.clear();
                 console.log("encode worker receive shared buffer");
             }
             break;
     }
 }
 
+let Audio_RTP_Frame = new Uint8Array(RTC_PACKET_MAX_SIZE);
+let Audio_RTP_Frame_32 = new Float32Array(Audio_RTP_Frame.buffer);
+
+function audio_encode_frame_callback(a, b) {
+    // console.log(len);
+    var ar = Module.HEAP8.subarray(a + 0, a + b);
+    Audio_RTP_Frame[0] = b;
+    Audio_RTP_Frame.set(ar, 1);
+
+    sendSAB.write(Audio_RTP_Frame_32);
+}
+
 function Encode_Timer() {
-    if (!encodeSAB) return ;
+    if (!encodeSAB || !local_data_ptr_) return ;
 
     let data = null;
     while( (data = encodeSAB.read() ) !== null) {
-        sendSAB.write(data);
+        // sendSAB.write(data);
+        local_data_.set(data);
+        audio_encode(audio_context, local_data_ptr_, audio_sample_rate / 100, audio_sample_rate);
     }
 }
 

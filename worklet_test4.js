@@ -24,7 +24,7 @@ class myworklet extends AudioWorkletProcessor {
     }
 
     inputData(inputs) {
-        if (!this.encodeSAB && inputs[0] && inputs[0][0]) return true;
+        if (!this.encodeSAB || !inputs[0] || !inputs[0][0]) return true;
         this.encodeSAB.write(inputs[0][0]);
     }
 
