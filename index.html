@@ -10,6 +10,10 @@
         height:50px;
         font-size:30px;
       }
+
+      textarea {
+          width:30%;
+      }
     </style>
   </head>
   <body>
@@ -18,133 +22,111 @@
     <br>
     <p><strong>select conditions:</strong> </p>
     <div class="conditions" id="conditions">
-        <input type="checkbox" name="useUDP" id="useUDP" value="useUDP" checked>
+        <input type="radio" name="network" id="useUDP" value="useUDP" checked>
         <label for="useUDP">Use UDP</label>
+        <br>
+        <input type="radio" name="network" id="useWebsocket" value="useWebsocket">
+        <label for="useWebsocket">Use Websocket</label>
         <br>
     </div>
     <br>
-    <p><strong>select mic devices list:</strong> </p>
-    <div class="inputs" id="inputs">
-    </div>
-    <br>
-    <p><strong>select speaker devices list:</strong></p>
-    <div class="outputs" id="outputs">
-    </div>
-
-    <br>
     <button onclick="StartText(this)"><strong>Start Test</strong></button>
     <script src="wusocket.js"></script>
-    <script src="udpsocket.js"></script>
-    <script src="sab.js"></script>
-    <script src="audioapi.js"></script>
-    <script src="audiotest.js"></script>
-    <script>        
-        class wokletNode extends AudioWorkletNode {
-            constructor(context) {
-                super(context, 'myworklet');
-                this.port.onmessage = this.handleMessage.bind(this);
-            }
+    <script>
+        let logDom = document.getElementById("log");
+        let conditionDom = document.getElementById("conditions");
+        let network = null;
+        let check_timer_interval = null;
+        let sendSeq = 0;
+        let maxStableCount = 200;
+        let timeNow = null;
+        let buff = new Uint8Array(100);
 
-            handleMessage(event) {
+        function log(str) {
+            logDom.textContent = str;
+        }
+
+        function Send_timer() {
+            network.send(buff.buffer);
+            sendSeq ++;
+        }
+
+        function Check_timer() {
+            network.send("check ==>" + sendSeq );
+            sendSeq ++;
+            if (sendSeq > maxStableCount) {
+                clearInterval(check_timer_interval);
+                setInterval( Send_timer, 20);
+                log("udp is working!!!!");
             }
         }
 
-        class Workers {
-            constructor() {
-                this.workers = {};
-            }
-
-            start(name, path, cb) {
-                if (this.workers[name]) return ;
-                let worker = new Worker(path);
-                this.workers[name] = worker;
-                let that = this;
-                worker.onmessage = cb || function() {
-                    that.onmessage.call(that, name, ...arguments)
-                }
-            }
-
-            postMessage(name, ...args) {
-                let worker = this.workers[name];
-                if (!worker) return ;
-
-                worker.postMessage.apply(worker, args);
-            }
-
-            onmessage(name, ...args) {
-
-            }
-        }
-        let sharedBuffer = {
-            inputState: new SharedArrayBuffer(5 * 4),
-            inputBuffer: new SharedArrayBuffer(640 * 4 * 4),
-
-            outputState: new SharedArrayBuffer(5 * 4),
-            outputBuffer: new SharedArrayBuffer(640 * 4 * 4),
+        function Recv_Pck(evt) {
+            timeNow = new Date().getTime();
         }
 
-        let sendSharedBuffer = {
-            state : new SharedArrayBuffer(5 * 4),
-            buffer : new SharedArrayBuffer(640 * 4 * 4)
-        }
-
-        let receiveSharedBuffer = {
-            state : new SharedArrayBuffer(5 * 4),
-            buffer : new SharedArrayBuffer(640 * 4 * 4)
-        }
-
-        let workers = new Workers();
-        workers.start("encode", "./encode.js");
-        workers.start("decode", "./decode.js");
-
-        workers.postMessage("encode", {
-            event : "sharedBuffer",
-            sharedBuffer : sharedBuffer,
-            sendSharedBuffer : sendSharedBuffer
-        });
-
-        workers.postMessage("decode", {
-            event : "sharedBuffer",
-            sharedBuffer : sharedBuffer,
-            receiveSharedBuffer : receiveSharedBuffer
-        });
-
-
-        let audioText = null;
         function StartText() {
-            if (audioText) audioText.stop();
-
-            let inputs = inputsDom.querySelectorAll("input");
-            let outputs = outputsDom.querySelectorAll("input");
             let conditions = conditionDom.querySelectorAll("input");
-
-            let inputDeviceId, outputDeviceId ;
-            let useUDP ;
-            console.log(inputs,outputs);
-
+            let useUDP = false;
+            let useWebsocket = false;
+            
             conditions.forEach(input => {
-                if (input.checked) {
+                if (input.id === "useUDP") {
                     useUDP = input.checked;
                 }
-            });
-
-            inputs.forEach(input => {
-                if (input.checked) {
-                    inputDeviceId = input.id;
+                
+                if (input.id === "useWebsocket") {
+                    useWebsocket = input.checked;
                 }
             });
 
-            outputs.forEach(input => {
-                if (input.checked) {
-                    outputDeviceId = input.id;
-                }
-            })
+            if (useUDP) {
+                testUDP ();
+            } else {
+                testWebsock ();
+            }
 
-            console.log(inputDeviceId, outputDeviceId, useUDP);
-            audioText = new AudioTest(inputDeviceId, outputDeviceId, {
-                useUDP : useUDP
-            });
-            audioText.start();
+            timeNow = new Date().getTime();
+            setInterval(() =>{ 
+                let cap = new Date().getTime() - timeNow;
+                if (cap > 5000) {
+                    log("network maybe is bad, long time can't receive message");
+                }
+            }, 500)
+        }
+
+        function testUDP() {
+            let url = window.location.origin + "/udp";
+            network = new WuSocket(url);
+            check_timer_interval = null;
+            sendSeq = 0;
+            maxStableCount = 200;
+
+            network.onopen = ()=>{
+                log("udp is testing, wait a moment!!!!");
+                check_timer_interval = setInterval( Check_timer, 100);
+            }
+            network.onmessage = Recv_Pck;
+        }
+
+        function testWebsock() {
+            sendSeq = 0;
+            let proto = window.location.protocol.indexOf("https") === -1 ? "ws://" : "wss://"
+            let url = proto + window.location.host + "/websocket";
+            // let url = "ws://127.0.0.1:9553/";
+            network = new WebSocket(url);
+            network.onopen = () =>{
+                log("websocket running");
+                setInterval( Send_timer, 20);
+            }
+            network.onclose = () =>{
+                log("websocket closed");
+            }
+
+            network.onerror = (err) =>{
+                console.error(err);
+            }
+            network.onmessage = Recv_Pck;
         }
     </script>
   </body>
