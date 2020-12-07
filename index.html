@@ -13,6 +13,16 @@
     </style>
   </head>
   <body>
+    <p><strong>Run Status</strong></p>
+    <textarea id="log" disabled></textarea>
+    <br>
+    <p><strong>select conditions:</strong> </p>
+    <div class="conditions" id="conditions">
+        <input type="checkbox" name="useUDP" id="useUDP" value="useUDP" checked>
+        <label for="useUDP">Use UDP</label>
+        <br>
+    </div>
+    <br>
     <p><strong>select mic devices list:</strong> </p>
     <div class="inputs" id="inputs">
     </div>
@@ -23,195 +33,119 @@
 
     <br>
     <button onclick="StartText(this)"><strong>Start Test</strong></button>
-    <script>
-        let inputsDom = document.getElementById("inputs");
-        let outputsDom = document.getElementById("outputs");
+    <script src="wusocket.js"></script>
+    <script src="udpsocket.js"></script>
+    <script src="sab.js"></script>
+    <script src="audioapi.js"></script>
+    <script src="audiotest.js"></script>
+    <script>        
+        class wokletNode extends AudioWorkletNode {
+            constructor(context) {
+                super(context, 'myworklet');
+                this.port.onmessage = this.handleMessage.bind(this);
+            }
 
-        navigator.mediaDevices.getUserMedia({audio:true}).then(stream =>{
-            stream.getAudioTracks().forEach(track =>{
-                track.stop();
+            handleMessage(event) {
+            }
+        }
+
+        class Workers {
+            constructor() {
+                this.workers = {};
+            }
+
+            start(name, path, cb) {
+                if (this.workers[name]) return ;
+                let worker = new Worker(path);
+                this.workers[name] = worker;
+                let that = this;
+                worker.onmessage = cb || function() {
+                    that.onmessage.call(that, name, ...arguments)
+                }
+            }
+
+            postMessage(name, ...args) {
+                let worker = this.workers[name];
+                if (!worker) return ;
+
+                worker.postMessage.apply(worker, args);
+            }
+
+            onmessage(name, ...args) {
+
+            }
+        }
+        let sharedBuffer = {
+            inputState: new SharedArrayBuffer(5 * 4),
+            inputBuffer: new SharedArrayBuffer(640 * 4 * 4),
+
+            outputState: new SharedArrayBuffer(5 * 4),
+            outputBuffer: new SharedArrayBuffer(640 * 4 * 4),
+        }
+
+        let sendSharedBuffer = {
+            state : new SharedArrayBuffer(5 * 4),
+            buffer : new SharedArrayBuffer(640 * 4 * 4)
+        }
+
+        let receiveSharedBuffer = {
+            state : new SharedArrayBuffer(5 * 4),
+            buffer : new SharedArrayBuffer(640 * 4 * 4)
+        }
+
+        let workers = new Workers();
+        workers.start("encode", "./encode.js");
+        workers.start("decode", "./decode.js");
+
+        workers.postMessage("encode", {
+            event : "sharedBuffer",
+            sharedBuffer : sharedBuffer,
+            sendSharedBuffer : sendSharedBuffer
+        });
+
+        workers.postMessage("decode", {
+            event : "sharedBuffer",
+            sharedBuffer : sharedBuffer,
+            receiveSharedBuffer : receiveSharedBuffer
+        });
+
+
+        let audioText = null;
+        function StartText() {
+            if (audioText) audioText.stop();
+
+            let inputs = inputsDom.querySelectorAll("input");
+            let outputs = outputsDom.querySelectorAll("input");
+            let conditions = conditionDom.querySelectorAll("input");
+
+            let inputDeviceId, outputDeviceId ;
+            let useUDP ;
+            console.log(inputs,outputs);
+
+            conditions.forEach(input => {
+                if (input.checked) {
+                    useUDP = input.checked;
+                }
             });
 
-            navigator.mediaDevices.enumerateDevices()
-			.then(function(devices) {
-                devices.forEach(function(device) {
-                    console.log(device.kind + ": " + device.label +
-                    " id = " + device.deviceId);
-                    if (device.kind === "audioinput") {
-                        var input = document.createElement("input");
-                        var label = document.createElement("label");
-
-                        input.type="radio";
-                        input.id=device.deviceId;
-                        input.name="inputs";
-                        input.value=device.label;
-
-                        label.for=device.label;
-                        label.textContent=device.label;
-
-                        inputsDom.appendChild(input);
-                        inputsDom.appendChild(label);
-
-                        var br = document.createElement("br");
-                        inputsDom.appendChild(br);
-
-                        if (device.deviceId === "default") {
-                            input.checked = true;
-                        }
-                    } else if (device.kind === "audiooutput") {
-                        var input = document.createElement("input");
-                        var label = document.createElement("label");
-
-                        input.type="radio";
-                        input.id=device.deviceId;
-                        input.name="outputs";
-                        input.value=device.label;
-
-                        label.for=device.label;
-                        label.textContent=device.label;
-
-                        outputsDom.appendChild(input);
-                        outputsDom.appendChild(label);
-
-                        var br = document.createElement("br");
-                        outputsDom.appendChild(br);
-
-                        if (device.deviceId === "default") {
-                            input.checked = true;
-                        }
-                    }
-                });
-			})
-			.catch(function(err) {
-			  console.log(err.name + ": " + err.message);
+            inputs.forEach(input => {
+                if (input.checked) {
+                    inputDeviceId = input.id;
+                }
             });
-        }).catch(console.error);
 
-
-            
-
-            class wokletNode extends AudioWorkletNode {
-                constructor(context) {
-                    super(context, 'myworklet');
-                    this.port.onmessage = this.handleMessage.bind(this);
+            outputs.forEach(input => {
+                if (input.checked) {
+                    outputDeviceId = input.id;
                 }
+            })
 
-                handleMessage(event) {
-                }
-            }
-
-
-            class AudioTest {
-                constructor(inputDeviceId, outputDeviceId) {
-                    this.audioContext       = null;//new AudioContext();
-                    this.audioStreamNode    = null;
-                    this.audioStream        = null;
-                    this.inputDeviceId      = inputDeviceId;
-                    this.outputDeviceId     = outputDeviceId;
-                    this.sampleRate         = 16000;
-                    this.audioWorkletNode   = null;
-                }
-
-                start() {
-                    navigator.mediaDevices.getUserMedia( {audio : {deviceId: this.inputDeviceId, autoGainControl: true,noiseSuppression:true,echoCancellation:true }} )
-                        .then(this.createAudioContext.bind(this))
-                        .then(this.createWorkletNode.bind(this))
-                        .then(this.connectWorkletNode.bind(this))
-                        .catch(console.error);
-                }
-
-                stop() {
-                    if (this.audioContext) this.audioContext.close();
-
-                    if (this.audioStreamNode) {
-                        this.audioStreamNode.disconnect();
-                        this.audioStreamNode = null;
-                    }
-
-                    if (this.audioWorkletNode) {
-                        this.audioWorkletNode.disconnect();
-                        this.audioWorkletNode = null;
-                    }
-
-                    if (this.audioDomNode){
-                        this.audioDomNode.srcObject = null;
-                        // this.audioDomNode.stop();
-                        this.audioDomNode = null;
-                    }
-
-                    if (this.audioStream) {
-                        const tracks = this.audioStream.getAudioTracks();
-                        tracks.forEach((track) => {
-                            track.stop()
-                        });
-
-                        this.audioStream = null;
-                    }
-                }
-
-                createAudioContext(stream) {
-                    this.audioContext = new AudioContext({
-                        sampleRate : this.sampleRate,
-                    });
-                    this.audioStream = stream;
-                    this.audioStreamNode = this.audioContext.createMediaStreamSource(stream);
-                    return new Promise((resolve) =>{resolve();});
-                }
-
-                createWorkletNode () {
-                    let that = this;
-                    return this.audioContext.audioWorklet.addModule("worklet_test4.js")
-                        .then(()=>{
-                            that.audioWorkletNode = new wokletNode(that.audioContext);
-                            return new Promise((resolve) =>{resolve();});
-                        });
-                }
-
-                connectWorkletNode() {
-                    this.audioStreamNode.connect(this.audioWorkletNode);
-                    
-                    let dest = this.audioContext.createMediaStreamDestination();
-                    this.audioWorkletNode.connect(dest);
-
-                    if (!this.audioDomNode) {
-                        this.audioDomNode = new Audio();
-                        
-                    }
-                    this.audioDomNode.srcObject = dest.stream;
-                    this.audioDomNode.play();
-
-                    this.audioDomNode.setSinkId(this.outputDeviceId).catch(err =>{
-                        console.error(err);
-                    });
-                }
-            }
-
-
-            let audioText = null;
-            function StartText() {
-                if (audioText) audioText.stop();
-
-                let inputs = inputsDom.querySelectorAll("input");
-                let outputs = outputsDom.querySelectorAll("input");
-
-                let inputDeviceId, outputDeviceId ;
-                console.log(inputs,outputs);
-                inputs.forEach(input => {
-                    if (input.checked) {
-                        inputDeviceId = input.id;
-                    }
-                });
-
-                outputs.forEach(input => {
-                    if (input.checked) {
-                        outputDeviceId = input.id;
-                    }
-                })
-
-                console.log(inputDeviceId, outputDeviceId);
-                audioText = new AudioTest(inputDeviceId, outputDeviceId);
-                audioText.start();
-            }
+            console.log(inputDeviceId, outputDeviceId, useUDP);
+            audioText = new AudioTest(inputDeviceId, outputDeviceId, {
+                useUDP : useUDP
+            });
+            audioText.start();
+        }
     </script>
   </body>
 </html>

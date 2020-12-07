@@ -1,57 +1,32 @@
-class myworklet extends AudioWorkletProcessor {
-    constructor() {
-        // The super constructor call is required.
-        super();
-        this.port.onmessage = this.handleMessage.bind(this);
-        this.g_sharedbuffer = null;
-        this.encodeSAB = null;
-        this.decodeSAB = null;
-    }
+let encodeSAB = null;
+let sendSAB = null;
+let sendSharedBuffer = null;
+let g_sharbuffer = null;
 
-    handleMessage(e) {
-        switch( e.data.event ) {
-            case "sharedBuffer":
-                {
-                    this.g_sharedbuffer = e.data.sharedBuffer;
-                    if (this.g_sharedbuffer) {
-                        this.encodeSAB = new SABRingBuffer(this.g_sharedbuffer.inputState, this.g_sharedbuffer.inputBuffer, 128);
-                        this.decodeSAB = new SABRingBuffer(this.g_sharedbuffer.outputState, this.g_sharedbuffer.outputBuffer, 128);
-                        console.log("worklet receive shared buffer");
-                    }
-                }
-                break;
-        }
-    }
-
-    inputData(inputs) {
-        if (!this.encodeSAB && inputs[0] && inputs[0][0]) return true;
-        this.encodeSAB.write(inputs[0][0]);
-    }
-
-    outputData(outputs) {
-        if (!this.decodeSAB) return true;
-        let buffer = this.decodeSAB.read();
-        if (buffer === null) {
-            // console.error(ERROR_WRITE_NO_DATA);
-            return true;
-        }
-        for (let i = 0;i < outputs.length;i ++) {
-            for (let j = 0;j < outputs[i].length;j ++) {
-                outputs[i][j].set(buffer);
+function OnMessage(e) {
+    switch( e.data.event ) {
+        case "sharedBuffer":
+            {
+                g_sharbuffer = e.data.sharedBuffer;
+                sendSharedBuffer = e.data.sendSharedBuffer;
+                sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, 160);
+                encodeSAB = new SABRingBuffer(g_sharbuffer.inputState, g_sharbuffer.inputBuffer, 160);
+                console.log("encode worker receive shared buffer");
             }
-        }
-    }
-
-    process(inputs, outputs, parameters) {
-        if (!this.g_sharedbuffer) return true;
-
-        this.inputData(inputs);
-        this.outputData(outputs);
-        return true;
+            break;
     }
 }
 
-registerProcessor('myworklet', myworklet);
+function Encode_Timer() {
+    if (!encodeSAB) return ;
+
+    let data = null;
+    while( (data = encodeSAB.read() ) !== null) {
+        sendSAB.write(data);
+    }
+}
+
+setInterval(Encode_Timer, 20);
 
 class SABRingBuffer{
     constructor(sabState, sabBuffer, PER_FRAME_LENGTH) {
@@ -203,3 +178,6 @@ class SABRingBuffer{
         return buffer ;
     }
 }
+
+self.addEventListener("message", OnMessage);
+
