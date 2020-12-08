@@ -30,7 +30,11 @@ Module["onRuntimeInitialized"] = () => {
     }
 
     local_data_ptr_ = Module._malloc(frame_size_10ms * 4);
-    local_data_ = Module.HEAPF32.subarray(local_data_ptr_/4, local_data_ptr_/4 + frame_size_10ms);   
+    local_data_ = Module.HEAPF32.subarray(local_data_ptr_/4, local_data_ptr_/4 + frame_size_10ms);  
+    
+    postMessage({
+        event: 0
+    })
 }
 
 let encodeSAB = null;
@@ -38,20 +42,25 @@ let sendSAB = null;
 let sendSharedBuffer = null;
 let g_sharbuffer = null;
 
-
+let process_timer_interval = null;
 function OnMessage(e) {
     switch( e.data.event ) {
-        case "sharedBuffer":
-            {
-                g_sharbuffer = e.data.sharedBuffer;
-                sendSharedBuffer = e.data.sendSharedBuffer;
-                sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
-                sendSAB.clear();
-                encodeSAB = new SABRingBuffer(g_sharbuffer.inputState, g_sharbuffer.inputBuffer, frame_size_10ms);
-                encodeSAB.clear();
-                console.log("encode worker receive shared buffer");
-            }
-            break;
+        case "sharedBuffer":{
+            g_sharbuffer = e.data.sharedBuffer;
+            sendSharedBuffer = e.data.sendSharedBuffer;
+            sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
+            sendSAB.clear();
+            encodeSAB = new SABRingBuffer(g_sharbuffer.inputState, g_sharbuffer.inputBuffer, frame_size_10ms);
+            encodeSAB.clear();
+            console.log("encode worker receive shared buffer");
+        }
+        break;
+
+        case "start": {
+            if (process_timer_interval) clearInterval(process_timer_interval);
+            process_timer_interval = setInterval(Encode_Timer, 20);
+        }
+        break;
     }
 }
 
@@ -78,7 +87,7 @@ function Encode_Timer() {
     }
 }
 
-setInterval(Encode_Timer, 20);
+// setInterval(Encode_Timer, 20);
 
 class SABRingBuffer{
     constructor(sabState, sabBuffer, PER_FRAME_LENGTH) {

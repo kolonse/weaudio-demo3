@@ -16,7 +16,10 @@ class AudioTest {
         this.audioWorkletNode   = null;
         this.opt                = {
             useUDP : opt.useUDP ? true : false,
-            url : opt.url || "https://10.100.50.80:9000/udp"
+            url : opt.url || "https://10.100.50.80:9000/udp",
+            useWebsocket : useWebsocket,
+            useAPM : useAPM,
+            usePeer : usePeer
         } ;
 
         this.sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
@@ -39,11 +42,12 @@ class AudioTest {
     }
 
     start() {
-        navigator.mediaDevices.getUserMedia( {audio : {deviceId: this.inputDeviceId, autoGainControl: true,noiseSuppression:true,echoCancellation:true }} )
+        navigator.mediaDevices.getUserMedia( {audio : {deviceId: this.inputDeviceId, autoGainControl: this.opt.useAPM,noiseSuppression:this.opt.useAPM,echoCancellation:this.opt.useAPM }} )
             .then(this.createAudioContext.bind(this))
             .then(this.createWorkletNode.bind(this))
             .then(this.connectWorkletNode.bind(this))
             .then(this.startNetwork.bind(this))
+            .then(this.startWorkers.bind(this))
             .catch(console.error);
     }
 
@@ -85,8 +89,26 @@ class AudioTest {
                 this.check_timer_interval = setInterval( this.Check_timer.bind(this), 100);
             }
             this.network.onmessage = this.Recv_Pck.bind(this);
-        } else {
-            setInterval( this.Send_timer.bind(this), 10);
+        } else if (this.opt.useWebsocket){
+            let proto = window.location.protocol.indexOf("https") === -1 ? "ws://" : "wss://"
+            let url = proto + window.location.host + "/websocket";
+            this.network = new WebSocket(url);
+            this.network.onopen = () =>{
+                log("websocket running");
+                setInterval( () =>{
+                    if (this.network.readyState === 1) {
+                        this.Send_timer();
+                    }
+                }, 10);
+            }
+            this.network.onclose = () =>{
+                log("websocket closed");
+            }
+
+            this.network.onerror = (err) =>{
+                console.error(err);
+            }
+            this.network.onmessage = this.Recv_Pck.bind(this);
         }
     }
 
@@ -112,7 +134,9 @@ class AudioTest {
     Send_Pck(data) {
         if (this.opt.useUDP) {
             this.network.send(data.buffer);
-        } else {
+        } else if (this.opt.useWebsocket) {
+            this.network.send(data);
+        }else {
             this.receSAB.write(data);
         }
     }
@@ -131,9 +155,18 @@ class AudioTest {
         let data = evt.data;
         if (typeof(data) === "string") {
             console.log(data, typeof(data));
+        } else if (data instanceof Blob) {
+            data.arrayBuffer().then((d) => {
+                let buff = new Uint8Array(d);
+                this.Decode_data_8[0] = buff.length;
+                this.Decode_data_8.set(buff, 1);
+    
+                this.receSAB.write(this.Decode_data);
+            });
         } else {
             // let buff = new Float32Array(data);
             // this.receSAB.write(buff);
+            
             let buff = new Uint8Array(data);
             this.Decode_data_8[0] = buff.length;
             this.Decode_data_8.set(buff, 1);
@@ -165,7 +198,7 @@ class AudioTest {
             });
     }
 
-    connectWorkletNode() {
+    async connectWorkletNode() {
         this.audioStreamNode.connect(this.audioWorkletNode);
         
         let dest = this.audioContext.createMediaStreamDestination();
@@ -175,11 +208,73 @@ class AudioTest {
             this.audioDomNode = new Audio();
             
         }
-        this.audioDomNode.srcObject = dest.stream;
+        this.audioDomNode.srcObject = await this.chromeAecWorkAround(dest.stream);
         this.audioDomNode.play();
 
         this.audioDomNode.setSinkId(this.outputDeviceId).catch(err =>{
             console.error(err);
         });
+    }
+
+    async chromeAecWorkAround(sourcestream) {
+        if (!this.opt.usePeer) {
+            return sourcestream;
+        }
+        if (this.rtcConnectionA || this.rtcConnectionB) {
+            return false;
+        }
+        let rtcConnection = null;
+        let rtcLoopbackConnection = null;
+        let loopbackStream = new MediaStream(); // this is the stream you will read from for actual audio output
+
+        const offerOptions = {
+            offerVideo: true,
+            offerAudio: true,
+            offerToReceiveAudio: false,
+            offerToReceiveVideo: false,
+        };
+
+        let offer, answer;
+
+        rtcConnection = new RTCPeerConnection();
+        rtcLoopbackConnection = new RTCPeerConnection();
+
+        rtcConnection.onicecandidate = e =>
+            e.candidate && rtcLoopbackConnection.addIceCandidate(new RTCIceCandidate(e.candidate));
+        rtcLoopbackConnection.onicecandidate = e =>
+            e.candidate && rtcConnection.addIceCandidate(new RTCIceCandidate(e.candidate));
+
+        rtcLoopbackConnection.ontrack = (e) => {
+            e.streams[0].getTracks().forEach((track) => {
+                loopbackStream.addTrack(track);
+            });
+        };
+
+        // setup the loopback
+        rtcConnection.addStream(sourcestream); // this stream would be the processed stream coming out of Web Audio API destination node
+        offer = await rtcConnection.createOffer(offerOptions);
+        offer.sdp = offer.sdp.replace('SAVPF 111', 'SAVPF 10 111');
+        offer.sdp = offer.sdp.replace('a=rtpmap:111 opus/48000/2', 'a=rtpmap:10 L16/16000\na=rtpmap:111 opus/48000/2');
+        await  rtcConnection.setLocalDescription(offer);
+        await  rtcLoopbackConnection.setRemoteDescription(offer);
+        answer = await  rtcLoopbackConnection.createAnswer();
+        answer.sdp = answer.sdp.replace('SAVPF 111', 'SAVPF 10 111');
+        answer.sdp = answer.sdp.replace('a=rtpmap:111 opus/48000/2', 'a=rtpmap:10 L16/16000\na=rtpmap:111 opus/48000/2');
+        await  rtcLoopbackConnection.setLocalDescription(answer);
+        await  rtcConnection.setRemoteDescription(answer);
+        //end rtcloopbackhack.js
+        this.rtcConnectionA = rtcConnection;
+        this.rtcConnectionB = rtcLoopbackConnection;
+        return loopbackStream;
+    }
+
+    startWorkers () {
+        workers.postMessage("encode", {
+            event : "start"
+        });
+
+        workers.postMessage("decode", {
+            event : "start"
+        });        
     }
 }

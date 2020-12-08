@@ -31,6 +31,9 @@ Module["onRuntimeInitialized"] = () => {
 
     local_data_ptr_ = Module._malloc(frame_size_10ms );
     local_data_ = Module.HEAP8.subarray(local_data_ptr_, local_data_ptr_ + frame_size_10ms);
+    postMessage({
+        event: 0
+    })
 }
 
 let decodeSAB = null;
@@ -38,19 +41,24 @@ let receSAB = null;
 let receiveSharedBuffer = null;
 let g_sharbuffer = null;
 
+let process_timer_interval = null;
 function OnMessage(e) {
     switch( e.data.event ) {
-        case "sharedBuffer":
-            {
-                g_sharbuffer = e.data.sharedBuffer;
-                receiveSharedBuffer = e.data.receiveSharedBuffer;
-                receSAB = new SABRingBuffer(receiveSharedBuffer.state, receiveSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
-                receSAB.clear();
-                decodeSAB = new SABRingBuffer(g_sharbuffer.outputState, g_sharbuffer.outputBuffer, frame_size_10ms);
-                decodeSAB.clear();
-                console.log("decode worker receive shared buffer");
-            }
-            break;
+        case "sharedBuffer":{
+            g_sharbuffer = e.data.sharedBuffer;
+            receiveSharedBuffer = e.data.receiveSharedBuffer;
+            receSAB = new SABRingBuffer(receiveSharedBuffer.state, receiveSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
+            receSAB.clear();
+            decodeSAB = new SABRingBuffer(g_sharbuffer.outputState, g_sharbuffer.outputBuffer, frame_size_10ms);
+            decodeSAB.clear();
+            console.log("decode worker receive shared buffer");
+        }
+        break;
+        case "start": {
+            if (process_timer_interval) clearInterval(process_timer_interval);
+            process_timer_interval = setInterval(Decode_Timer, 15);
+        }
+        break;
     }
 }
 
@@ -83,7 +91,7 @@ function Decode_Timer() {
     }
 }
 
-setInterval(Decode_Timer, 15);
+// setInterval(Decode_Timer, 15);
 
 class SABRingBuffer{
     constructor(sabState, sabBuffer, PER_FRAME_LENGTH) {

@@ -18,8 +18,19 @@
     <br>
     <p><strong>select conditions:</strong> </p>
     <div class="conditions" id="conditions">
-        <input type="checkbox" name="useUDP" id="useUDP" value="useUDP" checked>
+        <input type="radio" name="network" id="useUDP" value="useUDP" checked>
         <label for="useUDP">Use UDP</label>
+        <br>
+        <input type="radio" name="network" id="useWebsocket" value="useWebsocket">
+        <label for="useWebsocket">Use Websocket</label>
+        <br>
+        <br>
+        <input type="checkbox" name="useAPM" id="useAPM" value="useAPM" checked>
+        <label for="useAPM">Enable Audio Process(AEC/AGC/NS)</label> 
+        <br>
+
+        <input type="checkbox" name="usePeer" id="usePeer" value="usePeer" checked>
+        <label for="usePeer">Enable PeerConnection</label> 
         <br>
     </div>
     <br>
@@ -32,7 +43,7 @@
     </div>
 
     <br>
-    <button onclick="StartText(this)"><strong>Start Test</strong></button>
+    <button onclick="StartText(this)" disabled id="startText"><strong>Start Test</strong></button>
     <script src="wusocket.js"></script>
     <script src="udpsocket.js"></script>
     <script src="sab.js"></script>
@@ -94,8 +105,16 @@
         }
 
         let workers = new Workers();
-        workers.start("encode", "./encode.js");
-        workers.start("decode", "./decode.js");
+        workers.start("encode", "./encode.js", (e) => {
+            if (e.data.event === 0) {
+                WorkerOK(true, true);
+            }
+        });
+        workers.start("decode", "./decode.js", (e) => {
+            if (e.data.event === 0) {
+                WorkerOK(false, true);
+            }
+        });
 
         workers.postMessage("encode", {
             event : "sharedBuffer",
@@ -109,6 +128,17 @@
             receiveSharedBuffer : receiveSharedBuffer
         });
 
+        let encodeOK, decodeOK;
+        let startTextButton = document.getElementById("startText");
+        function WorkerOK(encode, state) {
+            if (encode) encodeOK = state;
+            else decodeOK = state;
+
+            if (encodeOK && decodeOK) {
+                startTextButton.disabled = false;
+                log("all is ok!!!");
+            }
+        }
 
         let audioText = null;
         function StartText() {
@@ -119,12 +149,25 @@
             let conditions = conditionDom.querySelectorAll("input");
 
             let inputDeviceId, outputDeviceId ;
-            let useUDP ;
+            let useUDP, useWebsocket;
+            let useAPM, usePeer;
             console.log(inputs,outputs);
 
             conditions.forEach(input => {
-                if (input.checked) {
+                if (input.id === "useUDP") {
                     useUDP = input.checked;
+                }
+
+                if (input.id === "useWebsocket") {
+                    useWebsocket = input.checked;
+                }
+
+                if (input.id === "useAPM" ) {
+                    useAPM = input.checked;
+                }
+
+                if (input.id === "usePeer") {
+                    usePeer = input.checked;
                 }
             });
 
@@ -139,10 +182,12 @@
                     outputDeviceId = input.id;
                 }
             })
-
             console.log(inputDeviceId, outputDeviceId, useUDP);
             audioText = new AudioTest(inputDeviceId, outputDeviceId, {
-                useUDP : useUDP
+                useUDP : useUDP,
+                useWebsocket : useWebsocket,
+                useAPM : useAPM,
+                usePeer : usePeer
             });
             audioText.start();
         }
