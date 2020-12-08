@@ -16,10 +16,9 @@ class AudioTest {
         this.audioWorkletNode   = null;
         this.opt                = {
             useUDP : opt.useUDP ? true : false,
-            url : opt.url || "https://10.100.50.80:9000/udp",
-            useWebsocket : useWebsocket,
-            useAPM : useAPM,
-            usePeer : usePeer
+            useWebsocket : opt.useWebsocket,
+            useAPM : opt.useAPM,
+            usePeer : opt.usePeer
         } ;
 
         this.sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
@@ -83,7 +82,8 @@ class AudioTest {
 
     startNetwork() {
         if (this.opt.useUDP) {
-            this.network = new WuSocket(this.opt.url);
+            let url = window.location.protocol + "//" + window.location.host + "/udp";
+            this.network = new WuSocket(url);
             this.network.onopen = ()=>{
                 log("udp is testing!!!!");
                 this.check_timer_interval = setInterval( this.Check_timer.bind(this), 100);
@@ -93,6 +93,7 @@ class AudioTest {
             let proto = window.location.protocol.indexOf("https") === -1 ? "ws://" : "wss://"
             let url = proto + window.location.host + "/websocket";
             this.network = new WebSocket(url);
+            this.network.binaryType = "arraybuffer";
             this.network.onopen = () =>{
                 log("websocket running");
                 setInterval( () =>{
@@ -135,7 +136,7 @@ class AudioTest {
         if (this.opt.useUDP) {
             this.network.send(data.buffer);
         } else if (this.opt.useWebsocket) {
-            this.network.send(data);
+            this.network.send(data.buffer);
         }else {
             this.receSAB.write(data);
         }
