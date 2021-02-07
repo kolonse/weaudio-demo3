@@ -4,7 +4,7 @@ function log(str) {
     logDom.textContent = str;
 }
 
-let RTC_PACKET_MAX_SIZE = 200;
+let RTC_PACKET_MAX_SIZE = 1500;
 class AudioTest {
     constructor(inputDeviceId, outputDeviceId, opt) {
         this.audioContext       = null;//new AudioContext();
@@ -18,7 +18,8 @@ class AudioTest {
             useUDP : opt.useUDP ? true : false,
             useWebsocket : opt.useWebsocket,
             useAPM : opt.useAPM,
-            usePeer : opt.usePeer
+            usePeer : opt.usePeer,
+            dropPackage : opt.dropPackage || 0
         } ;
 
         this.sendSAB = new SABRingBuffer(sendSharedBuffer.state, sendSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
@@ -38,6 +39,10 @@ class AudioTest {
         this.maxStableCount = 200;
 
         this.check_timer_interval = null;
+    }
+
+    shouldDropPackage() {
+        return Math.floor(Math.random() * 100) < this.opt.dropPackage;
     }
 
     start() {
@@ -83,6 +88,7 @@ class AudioTest {
     startNetwork() {
         if (this.opt.useUDP) {
             let url = window.location.protocol + "//" + window.location.host + "/udp";
+            //let url = "http://127.0.0.1:9555"
             this.network = new WuSocket(url);
             this.network.onopen = ()=>{
                 log("udp is testing!!!!");
@@ -110,6 +116,17 @@ class AudioTest {
                 console.error(err);
             }
             this.network.onmessage = this.Recv_Pck.bind(this);
+        } else {
+            setInterval( () =>{
+                if (!this.sendSAB) return ;
+
+                let data = null;
+                while( (data = this.sendSAB.read() ) !== null) {
+                    this.Encode_data.set(data);
+                    this.Send_Pck(this.Encode_data);
+                    break;
+                }
+            }, 10);
         }
     }
 
@@ -133,6 +150,10 @@ class AudioTest {
     }
 
     Send_Pck(data) {
+        if (this.shouldDropPackage()) {
+            return ;
+        }
+
         if (this.opt.useUDP) {
             this.network.send(data.buffer);
         } else if (this.opt.useWebsocket) {

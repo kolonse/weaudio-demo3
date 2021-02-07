@@ -18,18 +18,25 @@
     <br>
     <p><strong>select conditions:</strong> </p>
     <div class="conditions" id="conditions">
+        <label for="dropPackage">Drop Package Percent :</label>
+        <input type="number" name="dropPackage" id="dropPackage" value="0" min="0" max="80">
+        <br>
+        <br>    
         <input type="radio" name="network" id="useUDP" value="useUDP" checked>
         <label for="useUDP">Use UDP</label>
         <br>
         <input type="radio" name="network" id="useWebsocket" value="useWebsocket">
         <label for="useWebsocket">Use Websocket</label>
         <br>
+        <input type="radio" name="network" id="notall" value="notall">
+        <label for="notall">don't use udp/websocket</label>
+        <br>
         <br>
         <input type="checkbox" name="useAPM" id="useAPM" value="useAPM" checked>
         <label for="useAPM">Enable Audio Process(AEC/AGC/NS)</label> 
         <br>
 
-        <input type="checkbox" name="usePeer" id="usePeer" value="usePeer" checked>
+        <input type="checkbox" name="usePeer" id="usePeer" value="usePeer">
         <label for="usePeer">Enable PeerConnection</label> 
         <br>
     </div>
@@ -44,12 +51,14 @@
 
     <br>
     <button onclick="StartText(this)" disabled id="startText"><strong>Start Test</strong></button>
+    <script src="netlog.js"></script>
     <script src="wusocket.js"></script>
     <script src="udpsocket.js"></script>
     <script src="sab.js"></script>
     <script src="audioapi.js"></script>
     <script src="audiotest.js"></script>
-    <script>        
+    <script>
+
         class wokletNode extends AudioWorkletNode {
             constructor(context) {
                 super(context, 'myworklet');
@@ -96,12 +105,12 @@
 
         let sendSharedBuffer = {
             state : new SharedArrayBuffer(5 * 4),
-            buffer : new SharedArrayBuffer(600 * 4 * 4)
+            buffer : new SharedArrayBuffer(100 * 1500 * 4 * 4)
         }
 
         let receiveSharedBuffer = {
             state : new SharedArrayBuffer(5 * 4),
-            buffer : new SharedArrayBuffer(600 * 4 * 4)
+            buffer : new SharedArrayBuffer(100 * 1500 * 4 * 4)
         }
 
         let workers = new Workers();
@@ -151,9 +160,14 @@
             let inputDeviceId, outputDeviceId ;
             let useUDP, useWebsocket;
             let useAPM, usePeer;
+            let dropPackage ;
             console.log(inputs,outputs);
 
             conditions.forEach(input => {
+                if (input.id === "dropPackage") {
+                    dropPackage = parseInt(input.value);
+                }
+
                 if (input.id === "useUDP") {
                     useUDP = input.checked;
                 }
@@ -187,7 +201,8 @@
                 useUDP : useUDP,
                 useWebsocket : useWebsocket,
                 useAPM : useAPM,
-                usePeer : usePeer
+                usePeer : usePeer,
+                dropPackage : dropPackage
             });
             audioText.start();
         }

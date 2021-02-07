@@ -13,24 +13,24 @@ var local_data_ptr_ ;
 
 let audio_sample_rate = 16000 ;
 let frame_size_10ms = audio_sample_rate / 100;
-let RTC_PACKET_MAX_SIZE = 200;
+let RTC_PACKET_MAX_SIZE = 1500;
 
 Module["onRuntimeInitialized"] = () => {
-	audio_init = Module.cwrap('Audio_Init', 'number');
+	audio_init = Module.cwrap('Audio_Init', 'number', ['number']);
     audio_uninit = Module.cwrap('Audio_UnInit', 'number', ['number']);
     audio_encode = Module.cwrap('Audio_Encode', 'number', ['number', 'number', 'number', 'number']);
     audio_decode = Module.cwrap('Audio_Decode', 'number', ['number', 'number', 'number']);
     get_mixed_data = Module.cwrap('Get_Mixed_Audio', 'number', ['number', 'number', 'number']);
 
-    audio_context = audio_init();
+    audio_context = audio_init(0);
     if (!audio_context) {
         console.error("decoder init fail");
     } else {
         console.log("decoder init success");
     }
 
-    local_data_ptr_ = Module._malloc(frame_size_10ms );
-    local_data_ = Module.HEAP8.subarray(local_data_ptr_, local_data_ptr_ + frame_size_10ms);
+    local_data_ptr_ = Module._malloc(RTC_PACKET_MAX_SIZE );
+    local_data_ = Module.HEAP8.subarray(local_data_ptr_, local_data_ptr_ + RTC_PACKET_MAX_SIZE);
     postMessage({
         event: 0
     })
@@ -81,6 +81,7 @@ function Decode_Timer() {
         // decodeSAB.write(data);
         Audio_RTP_Frame_32.set(data);
         let len = Audio_RTP_Frame[0];
+
         let buff = Audio_RTP_Frame.subarray(1, 1 + len);
         local_data_.set(buff);
         audio_decode(audio_context, local_data_ptr_, len);
@@ -246,3 +247,9 @@ class SABRingBuffer{
 
 self.addEventListener("message", OnMessage);
 
+function LOG_OUT(filename,filenameLen, buff, buffLen) {
+    let fname = Module.HEAP8.subarray(filename, filename + filenameLen);
+
+    
+    // console.log(fname);
+}
