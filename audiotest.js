@@ -1,9 +1,3 @@
-let logDom = document.getElementById("log");
-
-function log(str) {
-    logDom.textContent = str;
-}
-
 let RTC_PACKET_MAX_SIZE = 1500;
 class AudioTest {
     constructor(inputDeviceId, outputDeviceId, opt) {
@@ -28,9 +22,11 @@ class AudioTest {
 
         this.Encode_data = new Float32Array(RTC_PACKET_MAX_SIZE / 4);
         this.Encode_data_8 = new Uint8Array(this.Encode_data.buffer);
+        this.Encode_data_32 = new Uint32Array(this.Encode_data.buffer);
 
         this.Decode_data = new Float32Array(RTC_PACKET_MAX_SIZE / 4);
         this.Decode_data_8 = new Uint8Array(this.Decode_data.buffer);
+        this.Decode_data_32 = new Uint32Array(this.Decode_data.buffer);
 
         this.sendSeq = 0;
         this.recvSeq = 0;
@@ -136,8 +132,8 @@ class AudioTest {
         let data = null;
         while( (data = this.sendSAB.read() ) !== null) {
             this.Encode_data.set(data);
-            let len = this.Encode_data_8[0];
-            let buff = this.Encode_data_8.subarray(1, 1 + len);
+            let len = this.Encode_data_32[0];
+            let buff = this.Encode_data_8.subarray(4, 4 + len);
             let sendData = new Uint8Array(len);
             sendData.set(buff);
 
@@ -180,8 +176,8 @@ class AudioTest {
         } else if (data instanceof Blob) {
             data.arrayBuffer().then((d) => {
                 let buff = new Uint8Array(d);
-                this.Decode_data_8[0] = buff.length;
-                this.Decode_data_8.set(buff, 1);
+                this.Decode_data_32[0] = buff.length;
+                this.Decode_data_8.set(buff, 4);
     
                 this.receSAB.write(this.Decode_data);
             });
@@ -190,8 +186,8 @@ class AudioTest {
             // this.receSAB.write(buff);
             
             let buff = new Uint8Array(data);
-            this.Decode_data_8[0] = buff.length;
-            this.Decode_data_8.set(buff, 1);
+            this.Decode_data_32[0] = buff.length;
+            this.Decode_data_8.set(buff, 4);
 
             this.receSAB.write(this.Decode_data);
         }

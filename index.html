@@ -29,7 +29,7 @@
         <label for="useWebsocket">Use Websocket</label>
         <br>
         <input type="radio" name="network" id="notall" value="notall">
-        <label for="notall">don't use udp/websocket</label>
+        <label for="notall">Don't use UDP/Websocket</label>
         <br>
         <br>
         <input type="checkbox" name="useAPM" id="useAPM" value="useAPM" checked>
@@ -57,62 +57,8 @@
     <script src="sab.js"></script>
     <script src="audioapi.js"></script>
     <script src="audiotest.js"></script>
+    <script src="common.js"></script>
     <script>
-
-        class wokletNode extends AudioWorkletNode {
-            constructor(context) {
-                super(context, 'myworklet');
-                this.port.onmessage = this.handleMessage.bind(this);
-            }
-
-            handleMessage(event) {
-            }
-        }
-
-        class Workers {
-            constructor() {
-                this.workers = {};
-            }
-
-            start(name, path, cb) {
-                if (this.workers[name]) return ;
-                let worker = new Worker(path);
-                this.workers[name] = worker;
-                let that = this;
-                worker.onmessage = cb || function() {
-                    that.onmessage.call(that, name, ...arguments)
-                }
-            }
-
-            postMessage(name, ...args) {
-                let worker = this.workers[name];
-                if (!worker) return ;
-
-                worker.postMessage.apply(worker, args);
-            }
-
-            onmessage(name, ...args) {
-
-            }
-        }
-        let sharedBuffer = {
-            inputState: new SharedArrayBuffer(5 * 4),
-            inputBuffer: new SharedArrayBuffer(640 * 4 * 4),
-
-            outputState: new SharedArrayBuffer(5 * 4),
-            outputBuffer: new SharedArrayBuffer(640 * 4 * 4),
-        }
-
-        let sendSharedBuffer = {
-            state : new SharedArrayBuffer(5 * 4),
-            buffer : new SharedArrayBuffer(100 * 1500 * 4 * 4)
-        }
-
-        let receiveSharedBuffer = {
-            state : new SharedArrayBuffer(5 * 4),
-            buffer : new SharedArrayBuffer(100 * 1500 * 4 * 4)
-        }
-
         let workers = new Workers();
         workers.start("encode", "./encode.js", (e) => {
             if (e.data.event === 0) {

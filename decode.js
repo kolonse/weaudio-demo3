@@ -64,6 +64,8 @@ function OnMessage(e) {
 
 let Audio_RTP_Frame = new Uint8Array(RTC_PACKET_MAX_SIZE);
 let Audio_RTP_Frame_32 = new Float32Array(Audio_RTP_Frame.buffer);
+let Audio_RTP_Frame_i32 = new Uint32Array(Audio_RTP_Frame.buffer);
+
 let Frame_callback_Data = null;
 
 function frame_callback(a, b) {
@@ -80,9 +82,9 @@ function Decode_Timer() {
     while( (data = receSAB.read() ) !== null) {
         // decodeSAB.write(data);
         Audio_RTP_Frame_32.set(data);
-        let len = Audio_RTP_Frame[0];
+        let len = Audio_RTP_Frame_i32[0];
 
-        let buff = Audio_RTP_Frame.subarray(1, 1 + len);
+        let buff = Audio_RTP_Frame.subarray(4, 4 + len);
         local_data_.set(buff);
         audio_decode(audio_context, local_data_ptr_, len);
     }

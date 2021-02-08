@@ -1,0 +1,93 @@
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>audio demo</title>
+    <style type="text/css">
+      button {
+        background-color: green;
+        width:50%;
+        height:50px;
+        font-size:30px;
+      }
+
+      textarea {
+          width:500px;
+          height:100px;
+      }
+    </style>
+  </head>
+  <body>
+    <p><strong>Run Status</strong></p>
+    <textarea id="log" disabled></textarea>
+    <br>
+    <p><strong>select conditions:</strong> </p>
+    <div class="conditions" id="conditions">
+        <label for="rtpFile">Choose a profile picture:</label>
+        <input type="file" id="rtpFile" name="rtpFile" accept=".pkt">
+    </div>
+    <br>
+    <p><strong>select speaker devices list:</strong></p>
+    <div class="outputs" id="outputs">
+    </div>
+    <br>
+    <button onclick="StartText(this)" id="startText"><strong>Start Test</strong></button>
+
+    <script src="audioapi.js"></script>
+    <script src="common.js"></script>
+    <script src="player.js"></script>
+    <script src="sab.js"></script>
+    <script>
+        let rtpFileDom = document.getElementById("rtpFile");
+        let audioTest;
+        let workers = new Workers();
+
+        function StartText() {
+            let rtpFiles = rtpFileDom.files;
+            if (rtpFiles.length === 0) {
+                log("you don't select file ...");
+                return ;
+            }
+            let rtpFile = rtpFiles.item(0);
+            console.log(rtpFile)
+            log("you select file ---> " + rtpFile.name);
+            log("start worker ...");
+
+            let decodeWorkerOk = false;
+            let workletOk = false;
+
+            workers.start("decode", "./decode.js", (e) => {
+                if (e.data.event === 0) {
+                    // WorkerOK(false, true);
+                    log("worker start ok ...");
+                    decodeWorkerOk = true;
+                }
+            });
+
+            workers.postMessage("decode", {
+                event : "sharedBuffer",
+                sharedBuffer : sharedBuffer,
+                receiveSharedBuffer : receiveSharedBuffer
+            });
+
+            let outputDeviceId;
+            let outputs = outputsDom.querySelectorAll("input");
+            outputs.forEach(input => {
+                if (input.checked) {
+                    outputDeviceId = input.id;
+                }
+            })
+            if (audioTest) {
+                audioTest.stop();
+                audioTest = null;
+            }
+
+            audioTest = new AudioTest(outputDeviceId, rtpFile);
+            audioTest.start();
+        }
+
+    </script>
+  </body>
+</html>
+
+

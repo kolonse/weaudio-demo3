@@ -67,11 +67,12 @@ function OnMessage(e) {
 
 let Audio_RTP_Frame = new Uint8Array(RTC_PACKET_MAX_SIZE);
 let Audio_RTP_Frame_32 = new Float32Array(Audio_RTP_Frame.buffer);
+let Audio_RTP_Frame_i32 = new Uint32Array(Audio_RTP_Frame.buffer);
 
 function audio_encode_frame_callback(a, b) {
     var ar = Module.HEAP8.subarray(a + 0, a + b);
-    Audio_RTP_Frame[0] = b;
-    Audio_RTP_Frame.set(ar, 1);
+    Audio_RTP_Frame_i32[0] = b;
+    Audio_RTP_Frame.set(ar, 4);
 
     sendSAB.write(Audio_RTP_Frame_32);
 }

@@ -12,7 +12,7 @@ navigator.mediaDevices.getUserMedia({audio:true}).then(stream =>{
         devices.forEach(function(device) {
             console.log(device.kind + ": " + device.label +
             " id = " + device.deviceId);
-            if (device.kind === "audioinput") {
+            if (device.kind === "audioinput" && inputsDom) {
                 var input = document.createElement("input");
                 var label = document.createElement("label");
 
@@ -33,7 +33,7 @@ navigator.mediaDevices.getUserMedia({audio:true}).then(stream =>{
                 if (device.deviceId === "default") {
                     input.checked = true;
                 }
-            } else if (device.kind === "audiooutput") {
+            } else if (device.kind === "audiooutput" && outputsDom) {
                 var input = document.createElement("input");
                 var label = document.createElement("label");
 
