@@ -1,4 +1,5 @@
 importScripts("audiolib.js")
+importScripts("netlog.js")
 
 var audio_init;
 var audio_encode;
@@ -56,7 +57,7 @@ function OnMessage(e) {
         break;
         case "start": {
             if (process_timer_interval) clearInterval(process_timer_interval);
-            process_timer_interval = setInterval(Decode_Timer, 15);
+            process_timer_interval = setInterval(Decode_Timer, 5);
         }
         break;
     }
@@ -249,9 +250,10 @@ class SABRingBuffer{
 
 self.addEventListener("message", OnMessage);
 
+let LogClient = new Netlog();
 function LOG_OUT(filename,filenameLen, buff, buffLen) {
     let fname = Module.HEAP8.subarray(filename, filename + filenameLen);
-
+    let data = Module.HEAP8.subarray(buff, buff + buffLen);
     
-    // console.log(fname);
+    LogClient.send(fname, data);
 }

@@ -30,6 +30,7 @@ class AudioTest {
                 return ;
             }
 
+            log("file read complete!!!")
             this.fileData = new Uint8Array(this.fileReader.result);
             this.createAudioContext()
                 .then(this.createWorkletNode.bind(this))
@@ -139,6 +140,6 @@ class AudioTest {
             this.Decode_data_32[0] = len;
             this.Decode_data_8.set(rtpData, 4);
             this.receSAB.write(this.Decode_data);
-        }, 20);
+        }, 23);
     }
 }

@@ -63,14 +63,17 @@ class Transport {
 class WebsocketTransport {
     constructor(url) {
         this.url = url || "ws://127.0.0.1:8801";
+        this.socket = null;
     }
 
     open() {
-
+        this.socket = new WebSocket(this.url);
     }
 
-    send() {
-
+    send(pck) {
+        if (this.socket && this.socket.readyState === 1) {
+            this.socket.send(pck);
+        }
     }
 
     on_message() {
@@ -80,6 +83,27 @@ class WebsocketTransport {
 
 class Netlog {
     constructor(proto, url) {
+        this.proto = proto || "websocket";
+        this.url = url;
 
+        this.transport = null;
+        if (this.proto === "websocket") {
+            this.transport = new WebsocketTransport(this.url);
+        }
+
+        this.open();
+    }
+
+    open() {
+        if (this.transport) this.transport.open();
+    }
+
+    send(fname, data) {
+        if (!this.transport) return;
+
+        let pck = new Package();
+        pck.addUint8array(fname);
+        pck.addUint8array(data);
+        this.transport.send(pck.format());
     }
 };

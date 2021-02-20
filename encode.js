@@ -1,4 +1,5 @@
 importScripts("audiolib.js")
+importScripts("netlog.js")
 
 var audio_param_set;
 var audio_init;
@@ -243,9 +244,10 @@ class SABRingBuffer{
 
 self.addEventListener("message", OnMessage);
 
+let LogClient = new Netlog();
 function LOG_OUT(filename,filenameLen, buff, buffLen) {
     let fname = Module.HEAP8.subarray(filename, filename + filenameLen);
+    let data = Module.HEAP8.subarray(buff, buff + buffLen);
     
-    // console.log(fname);
+    LogClient.send(fname, data);
 }
-
