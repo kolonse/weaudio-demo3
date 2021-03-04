@@ -23,13 +23,6 @@ Module["onRuntimeInitialized"] = () => {
     audio_decode = Module.cwrap('Audio_Decode', 'number', ['number', 'number', 'number']);
     get_mixed_data = Module.cwrap('Get_Mixed_Audio', 'number', ['number', 'number', 'number']);
 
-    audio_context = audio_init(0);
-    if (!audio_context) {
-        console.error("decoder init fail");
-    } else {
-        console.log("decoder init success");
-    }
-
     local_data_ptr_ = Module._malloc(RTC_PACKET_MAX_SIZE );
     local_data_ = Module.HEAP8.subarray(local_data_ptr_, local_data_ptr_ + RTC_PACKET_MAX_SIZE);
     postMessage({
@@ -56,8 +49,22 @@ function OnMessage(e) {
         }
         break;
         case "start": {
+            audio_context = audio_init(0);
+            if (!audio_context) {
+                console.error("decoder init fail");
+            } else {
+                console.log("decoder init success");
+            }
+        
             if (process_timer_interval) clearInterval(process_timer_interval);
             process_timer_interval = setInterval(Decode_Timer, 5);
+            break;
+        }
+        case "stop": {
+            if (process_timer_interval) clearInterval(process_timer_interval);
+            audio_uninit(audio_context);
+            audio_context = null;
+            break;
         }
         break;
     }
@@ -251,9 +258,15 @@ class SABRingBuffer{
 self.addEventListener("message", OnMessage);
 
 let LogClient = new Netlog();
-function LOG_OUT(filename,filenameLen, buff, buffLen) {
+LogClient.open();
+
+function LOG_OUT_WEBRTC(filename,filenameLen, buff, buffLen) {
     let fname = Module.HEAP8.subarray(filename, filename + filenameLen);
     let data = Module.HEAP8.subarray(buff, buff + buffLen);
     
     LogClient.send(fname, data);
+}
+
+function LOG_OUT() {
+    
 }

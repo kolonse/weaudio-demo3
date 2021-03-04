@@ -1,4 +1,14 @@
 let RTC_PACKET_MAX_SIZE = 1500;
+
+class RtpPacket {
+    constructor() {
+        this.timestamp = 0;
+        this.level = 0;
+        this.len = 0;
+        this.data = null;
+    }
+};
+
 class AudioTest {
     constructor(outputDeviceId, file) {
         this.audioContext       = null;
@@ -10,17 +20,57 @@ class AudioTest {
         this.fileReader         = new FileReader();
         this.fileData           = null;
         this.offset             = 0;
+        this.receSAB            = new SABRingBuffer(receiveSharedBuffer.state, receiveSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
 
-        this.receSAB = new SABRingBuffer(receiveSharedBuffer.state, receiveSharedBuffer.buffer, RTC_PACKET_MAX_SIZE / 4);
-
-        this.Decode_data = new Float32Array(RTC_PACKET_MAX_SIZE / 4);
-        this.Decode_data_8 = new Uint8Array(this.Decode_data.buffer);
-        this.Decode_data_32 = new Uint32Array(this.Decode_data.buffer);
+        this.Decode_data        = new Float32Array(RTC_PACKET_MAX_SIZE / 4);
+        this.Decode_data_8      = new Uint8Array(this.Decode_data.buffer);
+        this.Decode_data_32     = new Uint32Array(this.Decode_data.buffer);
 
         this.readTimer          = null;
+        this.rtpPckArray        = [];
+        this.isRunning          = false;
+
+        this.onplayend          = null;
+        this.onplaystart        = null;
+    }
+
+    passRtp() {
+        log("passing audio, please wait a later!!!");
+        return new Promise((resolve) => {
+            let int32 = new Uint32Array(1);
+            let int8 = new Uint8Array(int32.buffer);  
+
+            setTimeout(()=>{
+                for (let offset = 0; offset  + 12 < this.fileData.length;) {
+                    let packet = new RtpPacket();
+                
+                    let timestamp = this.fileData.subarray(offset, offset + 4);
+                    let level = this.fileData.subarray(offset + 4, offset + 8);
+                    let lenBuff = this.fileData.subarray(offset + 8, offset + 12);
+                    
+                    int8.set(timestamp);
+                    packet.timestamp = int32[0];
+    
+                    int8.set(level);
+                    packet.level = int32[0];
+    
+                    int8.set(lenBuff);
+                    packet.len = int32[0];
+    
+                    packet.data = this.fileData.subarray(offset + 12, offset + 12 + packet.len);
+                    offset = offset + 12 + packet.len ;
+
+                    this.rtpPckArray.push(packet);
+                }
+
+                log("passing audio complete!!!");
+                resolve();
+            }, 1);
+        });
     }
 
     start() {
+        if (this.isRunning) return ;
         this.fileReader.readAsArrayBuffer(this.file);
         this.fileReader.onloadend = () => {
             console.log(arguments);
@@ -32,13 +82,16 @@ class AudioTest {
 
             log("file read complete!!!")
             this.fileData = new Uint8Array(this.fileReader.result);
-            this.createAudioContext()
+            
+            this.passRtp()
+                .then(this.createAudioContext.bind(this))
                 .then(this.createWorkletNode.bind(this))
                 .then(this.connectWorkletNode.bind(this))
                 .then(this.startWorkers.bind(this))
                 .catch(console.error);
         }
 
+        this.isRunning = true;
     }
 
     stop() {
@@ -100,46 +153,41 @@ class AudioTest {
     }
 
     startWorkers () {
-        workers.postMessage("decode", {
-            event : "start"
-        });
+        if (this.onplaystart) this.onplaystart();
 
-        let int32 = new Uint32Array(1);
-        let int8 = new Uint8Array(int32.buffer);
-
+        let timeStep = 0;
+        let timeBegin = 0;
+        let timeEnd = 0;
         this.readTimer = setInterval(()=>{
-            // console.log("this.offset --> ", this.offset);
-
-            if (this.fileData.length - 12 < this.offset) {
-                log("play complete");
+            if (this.offset >= this.rtpPckArray.length) {
                 clearInterval(this.readTimer);
                 this.readTimer = null;
+                if (this.onplayend) this.onplayend();
                 return ;
             }
             
-            let timestamp = this.fileData.subarray(this.offset, this.offset + 4);
-            let level = this.fileData.subarray(this.offset + 4, this.offset + 8);
-            let lenBuff = this.fileData.subarray(this.offset + 8, this.offset + 12);
-            // console.log(lenBuff);
-            int8.set(lenBuff);
-            // console.log(int32);
-            let len = int32[0];
-            // console.log("result -->",len);
+            let packet = this.rtpPckArray[this.offset];
 
-            // if (len > 255) {
-            //     console.error("package is too large!!!!", len);
-            //     clearInterval(this.readTimer);
-            //     this.readTimer = null;
-            //     log("play error!!!");
-            //     return;
-            // }
+            if (timeStep === 0) {
+                timeStep = packet.timestamp;
+            }
 
-            let rtpData = this.fileData.subarray(this.offset + 12, this.offset + 12 + len);
-            this.offset = this.offset + 12 + len ;
+            if (timeBegin === 0) {
+                timeBegin = new Date().getTime();
+            }
 
-            this.Decode_data_32[0] = len;
-            this.Decode_data_8.set(rtpData, 4);
-            this.receSAB.write(this.Decode_data);
-        }, 23);
+            if (packet.timestamp <= timeStep) {
+                let rtpData = packet.data;
+                this.offset += 1;
+    
+                this.Decode_data_32[0] = packet.len;
+                this.Decode_data_8.set(rtpData, 4);
+                this.receSAB.write(this.Decode_data);
+            } else {
+                timeEnd = new Date().getTime();
+                timeStep += timeEnd - timeBegin;
+                timeBegin = timeEnd;
+            }
+        }, 5);
     }
 }

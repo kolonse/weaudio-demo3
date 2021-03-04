@@ -23,7 +23,7 @@
     <br>
     <p><strong>select conditions:</strong> </p>
     <div class="conditions" id="conditions">
-        <label for="rtpFile">Choose a profile picture:</label>
+        <label for="rtpFile">Choose a rtp file:</label>
         <input type="file" id="rtpFile" name="rtpFile" accept=".pkt">
     </div>
     <br>
@@ -31,7 +31,7 @@
     <div class="outputs" id="outputs">
     </div>
     <br>
-    <button onclick="StartText(this)" id="startText"><strong>Start Test</strong></button>
+    <button disabled onclick="StartText(this)" id="startText">Start Test</button>
 
     <script src="audioapi.js"></script>
     <script src="common.js"></script>
@@ -39,10 +39,39 @@
     <script src="sab.js"></script>
     <script>
         let rtpFileDom = document.getElementById("rtpFile");
+        let startButton = document.getElementById("startText");
+
         let audioTest;
         let workers = new Workers();
+        log("start worker ...");
 
+        workers.start("decode", "./decode.js", (e) => {
+            if (e.data.event === 0) {
+                // WorkerOK(false, true);
+                log("worker start ok ...");
+                startButton.disabled = false;
+            }
+        });
+
+        workers.postMessage("decode", {
+                event : "sharedBuffer",
+                sharedBuffer : sharedBuffer,
+                receiveSharedBuffer : receiveSharedBuffer
+        });
+
+        let isStartTest = true;
         function StartText() {
+            if (!isStartTest) {
+                workers.postMessage("decode", {
+                    event : "stop"
+                });
+                audioTest.stop();
+                audioTest = null;
+                isStartTest = true ;
+                startButton.textContent = "Start Test";
+                log("Test Stop...")
+                return ;
+            }
             let rtpFiles = rtpFileDom.files;
             if (rtpFiles.length === 0) {
                 log("you don't select file ...");
@@ -51,24 +80,6 @@
             let rtpFile = rtpFiles.item(0);
             console.log(rtpFile)
             log("you select file ---> " + rtpFile.name);
-            log("start worker ...");
-
-            let decodeWorkerOk = false;
-            let workletOk = false;
-
-            workers.start("decode", "./decode.js", (e) => {
-                if (e.data.event === 0) {
-                    // WorkerOK(false, true);
-                    log("worker start ok ...");
-                    decodeWorkerOk = true;
-                }
-            });
-
-            workers.postMessage("decode", {
-                event : "sharedBuffer",
-                sharedBuffer : sharedBuffer,
-                receiveSharedBuffer : receiveSharedBuffer
-            });
 
             let outputDeviceId;
             let outputs = outputsDom.querySelectorAll("input");
@@ -83,7 +94,25 @@
             }
 
             audioTest = new AudioTest(outputDeviceId, rtpFile);
+            audioTest.onplaystart = function() {
+                log("audio playing ...");
+                workers.postMessage("decode", {
+                    event : "start"
+                });
+                startButton.textContent = "Stop Test";
+            }
+            audioTest.onplayend = function() {
+                workers.postMessage("decode", {
+                    event : "stop"
+                });
+                audioTest.stop();
+                audioTest = null;
+                isStartTest = true;
+                startButton.textContent = "Start Test";
+                log("audio play complete.")
+            }
             audioTest.start();
+            isStartTest = false;
         }
 
     </script>
