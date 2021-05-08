@@ -1,4 +1,3 @@
-<!doctype html>
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
@@ -9,88 +8,94 @@
         background-color: green;
         width:50%;
         height:50px;
+        font-size:30px;
       }
 
-      button.selected {
-        background-color: red;
+      textarea {
+          width:500px;
+          height:100px;
       }
-
     </style>
   </head>
   <body>
+    <p><strong>Run Status</strong></p>
+    <textarea id="log" disabled></textarea>
+    <br>
+    <p><strong>select conditions:</strong> </p>
+    <div class="conditions" id="conditions">
+        <label for="sampleRate">Select Sample Rate &nbsp;&nbsp;:</label>
+        <select id="sampleRate">
+            <option value="16000">16K Hz</option>
+            <option value="48000">48K Hz</option>
+            <option value="0">default</option>
+        </select>
+        <br>
+        <br>
+        <label for="peerCodec">Peer Conn Codec &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</label>
+        <select id="peerCodec">
+            <option value="L16/16000">L16 16K</option>
+            <option value="L16/48000">L16 48K</option>
+            <option value="default">default</option>
+        </select>
+    </div>
+    <br>
+    <p><strong>select speaker devices list:</strong></p>
+    <div class="outputs" id="outputs">
+    </div>
+    <br>
+    <button onclick="StartText(this)" id="startText">Start Test</button>
+
+    <script src="audioapi.js"></script>
+    <script src="common.js"></script>
+    <script src="play.js"></script>
+    <script src="sab.js"></script>
     <script>
-        class wokletNode extends AudioWorkletNode {
-            constructor(context) {
-                super(context, 'myworklet');
-                this.port.onmessage = this.handleMessage.bind(this);
+        let pcmFileDom = document.getElementById("pcmFile");
+        let startButton = document.getElementById("startText");
+        let sampleRateDom = document.getElementById("sampleRate");
+        let peerCodecDom = document.getElementById("peerCodec");
+        let interpretationEnableDom = document.getElementById("interpretationEnable");
+
+        let audioTest;
+
+        let isStartTest = true;
+        function StartText() {
+            let sampleRate = parseInt(sampleRateDom.value);
+            let peerCodec = peerCodecDom.value;
+
+            startButton.disabled = true;
+            setTimeout(() => {
+                startButton.disabled = false;
+            }, 2000);
+
+            if (!isStartTest) {
+                audioTest.stop();
+                audioTest = null;
+                isStartTest = true ;
+                startButton.textContent = "Start Test";
+                log("Test Stop...")
+                return ;
             }
 
-            handleMessage(event) {
-            }
-        }
-
-        let audioContext            = null;
-        let sampleRate              = 16000;
-        let audioStreamNode         = null;
-        let audioWorkletNode        = null;
-        let audioDomNode            = null;
-        let worker                  = null;
-        
-        worker = new Worker('worker2.js');
-
-        // worker.onmessage = function(event) {
-        //     console.log(event);
-        //     sharedBuffer = event.data.data;
-        // }
-        let sharedBuffer = {
-            outputSig    : new SharedArrayBuffer(4),
-        };
-
-        worker.postMessage({
-            command : "init",
-            data    : sharedBuffer
-        });
-
-        navigator.mediaDevices.getUserMedia( {audio : {noiseSuppression : true, echoCancellation:false, autoGainControl:false} } )
-            .then(createAudioContext)
-            .then(createWorkletNode)
-            .then(connectWorkletNode)
-            .catch(console.log);
-
-
-        function createAudioContext(stream) {
-            audioContext = new AudioContext({
-                sampleRate : sampleRate,
-            });
-            audioStreamNode = audioContext.createMediaStreamSource(stream);
-            return new Promise((resolve) =>{resolve();});
-        }
-
-        function createWorkletNode () {
-            return audioContext.audioWorklet.addModule("worklet_test3.js")
-                .then(()=>{
-                    audioWorkletNode = new wokletNode(audioContext);
-                    audioWorkletNode.port.postMessage({
-                        status : "sharedBuffer",
-                        data    : sharedBuffer                        
-                    });
-                    return new Promise((resolve) =>{resolve();});
-                });
-        }
-
-        function connectWorkletNode() {
-            audioStreamNode.connect(audioWorkletNode);
+            startButton.textContent = "Stop Test";
             
-            let dest = audioContext.createMediaStreamDestination();
-            audioWorkletNode.connect(dest);
-
-
-            if (!audioDomNode) {
-                audioDomNode = new Audio();
+            let outputDeviceId;
+            let outputs = outputsDom.querySelectorAll("input");
+            outputs.forEach(input => {
+                if (input.checked) {
+                    outputDeviceId = input.id;
+                }
+            })
+            if (audioTest) {
+                audioTest.stop();
+                audioTest = null;
             }
-            audioDomNode.srcObject = dest.stream;
-            audioDomNode.play();
+
+            audioTest = new AudioTest(outputDeviceId, sampleRate, peerCodec);
+            audioTest.start();
+            isStartTest = false;
         }
+
     </script>
   </body>
 </html>
