@@ -342,3 +342,7 @@ class CommunicationWithMainAndSubHTML {
         this.listenEventList[EVENT_TYPE[type]] = callback;
     }
 }
+
+function isFirefox() {
+    return /firefox/.test(navigator.userAgent.toLowerCase())
+}

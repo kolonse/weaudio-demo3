@@ -85,9 +85,15 @@ class AudioTest {
     }
 
     async connectStream() {
+        if (isFirefox()) {
+            this.bufferSourceNode.connect(this.audioContext.destination);
+            this.bufferSourceNode.loop = true;
+            this.bufferSourceNode.start();
+            return;
+        }
         let dest = this.audioContext.createMediaStreamDestination();
         this.bufferSourceNode.connect(dest);
-
+        
         if (!this.audioDomNode) {
             this.audioDomNode = new Audio();
         }
@@ -99,6 +105,7 @@ class AudioTest {
         this.bufferSourceNode.start();
         this.audioDomNode.play();
 
+        
         this.audioDomNode.setSinkId(this.outputDeviceId).catch(err =>{
             console.error(err);
         });
